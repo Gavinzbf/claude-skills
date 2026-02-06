@@ -1,0 +1,369 @@
+# AI 视频编辑器配置文件
+# =========================
+
+# Gemini API 配置
+gemini:
+  # 模型选择
+  # - gemini-2.0-flash: 快速，适合大多数任务（推荐）
+  # - gemini-2.0-flash-thinking: 需要深度分析时使用
+  # - gemini-1.5-pro: 旧版模型，兼容性好
+  model: "gemini-2.0-flash"
+
+  # API 调用设置
+  api:
+    # 请求超时（秒）
+    timeout: 120
+    # 重试次数
+    max_retries: 3
+    # 请求间隔（秒），避免频率限制
+    request_interval: 1
+
+  # 视频分析设置
+  video_analysis:
+    # 最大视频大小（MB），超过此大小会警告
+    max_file_size_mb: 100
+    # 支持的视频格式
+    supported_formats:
+      - ".mp4"
+      - ".avi"
+      - ".mov"
+      - ".mkv"
+      - ".webm"
+      - ".m4v"
+
+# 输出预设
+output_presets:
+  # 抖音/TikTok 竖屏
+  douyin:
+    name: "抖音/TikTok"
+    width: 1080
+    height: 1920
+    aspect_ratio: "9:16"
+    fps: 30
+    video_codec: "libx264"
+    audio_codec: "aac"
+    video_bitrate: "4M"
+    audio_bitrate: "128k"
+    max_duration: 60  # 秒
+    recommended_duration: 15-30  # 秒
+    format: "mp4"
+
+  # YouTube Shorts
+  youtube_shorts:
+    name: "YouTube Shorts"
+    width: 1080
+    height: 1920
+    aspect_ratio: "9:16"
+    fps: 30
+    video_codec: "libx264"
+    audio_codec: "aac"
+    video_bitrate: "8M"
+    audio_bitrate: "192k"
+    max_duration: 60  # 秒
+    format: "mp4"
+
+  # 微信视频号（竖屏）
+  weixin_vertical:
+    name: "微信视频号（竖屏）"
+    width: 1080
+    height: 1920
+    aspect_ratio: "9:16"
+    fps: 30
+    video_codec: "libx264"
+    audio_codec: "aac"
+    video_bitrate: "4M"
+    audio_bitrate: "128k"
+    max_duration: 60
+    format: "mp4"
+
+  # 微信视频号（横屏）
+  weixin_horizontal:
+    name: "微信视频号（横屏）"
+    width: 1920
+    height: 1080
+    aspect_ratio: "16:9"
+    fps: 30
+    video_codec: "libx264"
+    audio_codec: "aac"
+    video_bitrate: "4M"
+    audio_bitrate: "128k"
+    max_duration: 60
+    format: "mp4"
+
+  # Instagram Reels
+  instagram_reels:
+    name: "Instagram Reels"
+    width: 1080
+    height: 1920
+    aspect_ratio: "9:16"
+    fps: 30
+    video_codec: "libx264"
+    audio_codec: "aac"
+    video_bitrate: "6M"
+    audio_bitrate: "128k"
+    max_duration: 90
+    format: "mp4"
+
+  # 通用横屏 1080p
+  horizontal_1080p:
+    name: "通用横屏 1080p"
+    width: 1920
+    height: 1080
+    aspect_ratio: "16:9"
+    fps: 30
+    video_codec: "libx264"
+    audio_codec: "aac"
+    video_bitrate: "8M"
+    audio_bitrate: "192k"
+    format: "mp4"
+
+# FFmpeg 命令模板
+ffmpeg_templates:
+  # 裁剪视频片段
+  trim: >-
+    ffmpeg -i "{input}" -ss {start} -to {end}
+    -c:v {video_codec} -c:a {audio_codec}
+    -b:v {video_bitrate} -b:a {audio_bitrate}
+    "{output}"
+
+  # 合并视频（使用文件列表）
+  concat: >-
+    ffmpeg -f concat -safe 0 -i "{filelist}"
+    -c copy "{output}"
+
+  # 合并视频（需要重编码时）
+  concat_reencode: >-
+    ffmpeg -f concat -safe 0 -i "{filelist}"
+    -c:v {video_codec} -c:a {audio_codec}
+    -b:v {video_bitrate} -b:a {audio_bitrate}
+    "{output}"
+
+  # 调整分辨率（保持宽高比，填充黑边）
+  resize_pad: >-
+    ffmpeg -i "{input}"
+    -vf "scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
+    -c:v {video_codec} -c:a {audio_codec}
+    "{output}"
+
+  # 调整分辨率（裁剪以填满）
+  resize_crop: >-
+    ffmpeg -i "{input}"
+    -vf "scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
+    -c:v {video_codec} -c:a {audio_codec}
+    "{output}"
+
+  # 添加淡入淡出
+  fade: >-
+    ffmpeg -i "{input}"
+    -vf "fade=t=in:st=0:d={fade_in},fade=t=out:st={fade_out_start}:d={fade_out}"
+    -c:v {video_codec} -c:a {audio_codec}
+    "{output}"
+
+  # 调整速度（简单全局变速）
+  speed: >-
+    ffmpeg -i "{input}"
+    -filter:v "setpts={video_pts}*PTS"
+    -filter:a "atempo={audio_tempo}"
+    -c:v {video_codec} -c:a {audio_codec}
+    "{output}"
+
+  # 分段变速（speed ramp）- 视频部分
+  # 使用 split + trim + setpts + concat 实现
+  # 示例：3 段变速
+  speed_ramp_video_3seg: >-
+    ffmpeg -i "{input}" -filter_complex "
+    [0:v]split=3[v0][v1][v2];
+    [v0]trim=start={seg1_start}:end={seg1_end},setpts={seg1_pts}*(PTS-STARTPTS)[s1];
+    [v1]trim=start={seg2_start}:end={seg2_end},setpts={seg2_pts}*(PTS-STARTPTS)[s2];
+    [v2]trim=start={seg3_start}:end={seg3_end},setpts={seg3_pts}*(PTS-STARTPTS)[s3];
+    [s1][s2][s3]concat=n=3:v=1:a=0[vout]
+    " -map "[vout]" -c:v {video_codec} -b:v {video_bitrate} "{output}"
+
+  # 分段变速（speed ramp）- 包含音频
+  # 注意：atempo 范围 0.5-2.0，超出需链式处理
+  speed_ramp_full_3seg: >-
+    ffmpeg -i "{input}" -filter_complex "
+    [0:v]split=3[v0][v1][v2];
+    [v0]trim=start={seg1_start}:end={seg1_end},setpts={seg1_pts}*(PTS-STARTPTS)[vs1];
+    [v1]trim=start={seg2_start}:end={seg2_end},setpts={seg2_pts}*(PTS-STARTPTS)[vs2];
+    [v2]trim=start={seg3_start}:end={seg3_end},setpts={seg3_pts}*(PTS-STARTPTS)[vs3];
+    [vs1][vs2][vs3]concat=n=3:v=1:a=0[vout];
+    [0:a]asplit=3[a0][a1][a2];
+    [a0]atrim=start={seg1_start}:end={seg1_end},asetpts=PTS-STARTPTS,atempo={seg1_atempo}[as1];
+    [a1]atrim=start={seg2_start}:end={seg2_end},asetpts=PTS-STARTPTS,atempo={seg2_atempo}[as2];
+    [a2]atrim=start={seg3_start}:end={seg3_end},asetpts=PTS-STARTPTS,atempo={seg3_atempo}[as3];
+    [as1][as2][as3]concat=n=3:v=0:a=1[aout]
+    " -map "[vout]" -map "[aout]" -c:v {video_codec} -c:a {audio_codec}
+    -b:v {video_bitrate} -b:a {audio_bitrate} "{output}"
+
+  # 裁剪 + 单段变速
+  trim_with_speed: >-
+    ffmpeg -i "{input}" -ss {start} -to {end}
+    -filter:v "setpts={video_pts}*PTS"
+    -filter:a "atempo={audio_tempo}"
+    -c:v {video_codec} -c:a {audio_codec}
+    -b:v {video_bitrate} -b:a {audio_bitrate}
+    "{output}"
+
+  # 获取视频信息
+  probe: >-
+    ffprobe -v quiet -print_format json -show_format -show_streams "{input}"
+
+  # 提取关键帧
+  extract_keyframes: >-
+    ffmpeg -i "{input}" -vf "select='gt(scene,{threshold})'" -vsync vfr "{output_pattern}"
+
+  # 每秒提取 N 帧
+  extract_frames_fps: >-
+    ffmpeg -i "{input}" -vf "fps={fps}" "{output_pattern}"
+
+# 变速参数说明
+speed_ramp_notes:
+  description: |
+    分段变速（Speed Ramp）实现说明：
+
+    1. 视频变速公式：
+       - setpts = 1.0 / speed
+       - 例如：2x 速度 → setpts=0.5*PTS
+       - 例如：0.5x 速度 → setpts=2.0*PTS
+
+    2. 音频变速限制：
+       - atempo 范围：0.5 - 2.0
+       - 超出范围需要链式处理：
+         - 4x 速度：atempo=2.0,atempo=2.0
+         - 0.25x 速度：atempo=0.5,atempo=0.5
+
+    3. 时间单位：
+       - trim/atrim 使用秒（支持小数）
+       - 建议从毫秒转换：ms / 1000.0
+
+  speed_to_pts:
+    "0.5x": 2.0
+    "0.7x": 1.4286
+    "0.8x": 1.25
+    "1.0x": 1.0
+    "1.2x": 0.8333
+    "1.5x": 0.6667
+    "2.0x": 0.5
+    "3.0x": 0.3333
+    "4.0x": 0.25
+    "5.0x": 0.2
+
+  atempo_chains:
+    "0.25x": "atempo=0.5,atempo=0.5"
+    "0.5x": "atempo=0.5"
+    "0.7x": "atempo=0.7"
+    "1.0x": "atempo=1.0"
+    "1.5x": "atempo=1.5"
+    "2.0x": "atempo=2.0"
+    "3.0x": "atempo=2.0,atempo=1.5"
+    "4.0x": "atempo=2.0,atempo=2.0"
+    "5.0x": "atempo=2.0,atempo=2.0,atempo=1.25"
+
+# 转场效果
+transitions:
+  # 硬切（无转场）
+  cut:
+    name: "硬切"
+    description: "直接切换，无过渡效果"
+    ffmpeg_filter: null
+
+  # 淡入淡出
+  fade:
+    name: "淡入淡出"
+    description: "渐隐渐显"
+    duration: 0.5  # 秒
+    ffmpeg_filter: "fade"
+
+  # 交叉溶解
+  crossfade:
+    name: "交叉溶解"
+    description: "两个画面叠加过渡"
+    duration: 0.5
+    ffmpeg_filter: "xfade=transition=fade:duration={duration}"
+
+  # 滑入
+  slide:
+    name: "滑入"
+    description: "新画面从一侧滑入"
+    duration: 0.3
+    ffmpeg_filter: "xfade=transition=slideleft:duration={duration}"
+
+  # 缩放
+  zoom:
+    name: "缩放"
+    description: "缩放过渡"
+    duration: 0.3
+    ffmpeg_filter: "xfade=transition=zoomin:duration={duration}"
+
+# 剪辑风格预设
+editing_styles:
+  # 抖音/TikTok 风格
+  tiktok:
+    name: "抖音/TikTok 快节奏"
+    description: "节奏快，切换频繁，适合娱乐内容"
+    avg_clip_duration: 2-4  # 秒
+    transition: "cut"
+    pace: "fast"
+    tips:
+      - "开头 3 秒必须抓住注意力"
+      - "保持节奏紧凑"
+      - "使用流行音乐"
+
+  # Vlog 风格
+  vlog:
+    name: "Vlog 日常"
+    description: "节奏适中，注重叙事"
+    avg_clip_duration: 4-8
+    transition: "crossfade"
+    pace: "medium"
+    tips:
+      - "注重故事性"
+      - "可以使用旁白"
+      - "转场自然"
+
+  # 电影感
+  cinematic:
+    name: "电影感"
+    description: "节奏较慢，注重氛围"
+    avg_clip_duration: 5-10
+    transition: "fade"
+    pace: "slow"
+    tips:
+      - "注重构图和光影"
+      - "使用氛围音乐"
+      - "可以使用慢动作"
+
+  # 产品展示
+  product:
+    name: "产品展示"
+    description: "突出产品特点"
+    avg_clip_duration: 3-5
+    transition: "slide"
+    pace: "medium"
+    tips:
+      - "清晰展示产品细节"
+      - "使用干净背景"
+      - "配合解说文字"
+
+# 质量评分权重
+quality_scoring:
+  weights:
+    stability: 0.25      # 画面稳定性
+    clarity: 0.25        # 清晰度
+    lighting: 0.20       # 光线条件
+    content_value: 0.30  # 内容价值
+
+  thresholds:
+    excellent: 8         # 8-10 分：优秀
+    good: 6              # 6-7 分：良好
+    acceptable: 4        # 4-5 分：可接受
+    poor: 0              # 0-3 分：较差，考虑跳过
+
+# 分析输出目录
+analysis:
+  output_dir_name: ".ai-editor-analysis"
+  files:
+    clip_analysis: "{stem}_analysis.json"
+    story_summary: "story_summary.json"
+    edit_plan: "edit_plan.json"

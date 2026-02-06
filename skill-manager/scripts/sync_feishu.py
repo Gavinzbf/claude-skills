@@ -34,6 +34,8 @@ SKILL_FIELDS = [
     {"field_name": "同步状态", "type": 1},
     {"field_name": "来源地址", "type": 15},
     {"field_name": "我的仓库", "type": 15},
+    {"field_name": "作用域", "type": 1},
+    {"field_name": "所属项目", "type": 1},
 ]
 
 # ── MCP 表字段定义 ──────────────────────────────────────────────
@@ -331,6 +333,9 @@ def skill_to_fields(entry: dict) -> dict:
     my_url = entry.get("github_my_url", "")
     if my_url:
         fields["我的仓库"] = {"text": my_url, "link": my_url}
+
+    fields["作用域"] = "项目级" if entry.get("scope") == "project" else "全局"
+    fields["所属项目"] = entry.get("project", "")
 
     return fields
 

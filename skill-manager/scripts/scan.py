@@ -53,23 +53,29 @@ KNOWN_SKILL_SOURCES = {
     "skill-creator": "https://github.com/anthropics/skills/tree/main/skills/skill-creator",
 }
 
-# ── 用户 GitHub 仓库配置（从 .env 加载，可覆盖）────────────────
+# ── 用户配置（从 .env 加载）────────────────────────────────────
 MY_GITHUB_REPO = ""
+PROJECT_SCAN_DIRS = []
 
 
-def load_my_github_repo(env_path: Path = None) -> str:
-    """从 .env 加载 MY_GITHUB_REPO，或回退默认值"""
-    global MY_GITHUB_REPO
-    if env_path and env_path.exists():
-        try:
-            for line in env_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line.startswith("MY_GITHUB_REPO="):
-                    MY_GITHUB_REPO = line.split("=", 1)[1].strip().strip('"').strip("'").rstrip("/")
-                    return MY_GITHUB_REPO
-        except OSError:
-            pass
-    return MY_GITHUB_REPO
+def load_env_config(env_path: Path = None):
+    """从 .env 加载 MY_GITHUB_REPO 和 PROJECT_SCAN_DIRS"""
+    global MY_GITHUB_REPO, PROJECT_SCAN_DIRS
+    if not env_path or not env_path.exists():
+        return
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            val = val.strip().strip('"').strip("'")
+            if key.strip() == "MY_GITHUB_REPO":
+                MY_GITHUB_REPO = val.rstrip("/")
+            elif key.strip() == "PROJECT_SCAN_DIRS":
+                PROJECT_SCAN_DIRS = [d.strip() for d in val.split(",") if d.strip()]
+    except OSError:
+        pass
 
 
 # ── 工具函数 ────────────────────────────────────────────────────
@@ -226,13 +232,16 @@ def health_check(skill_dir: Path) -> dict:
 
 # ── 技能扫描 ────────────────────────────────────────────────────
 
-def scan_single_skill(skill_dir: Path) -> dict | None:
+def scan_single_skill(skill_dir: Path, scope: str = "global", project: str = "") -> dict | None:
     """扫描单个技能，返回注册表条目"""
     md_path = find_skill_md(skill_dir)
     if md_path is None:
         return None
 
     fm = parse_frontmatter(md_path)
+    if fm is None:
+        return None
+
     name = fm.get("name", skill_dir.name) if fm else skill_dir.name
     desc = str(fm.get("description", "")).strip() if fm else ""
 
@@ -245,7 +254,7 @@ def scan_single_skill(skill_dir: Path) -> dict | None:
     # 判断来源：已知下载的 skill 用来源地址，其余视为自创
     is_downloaded = name in KNOWN_SKILL_SOURCES
     source_url = KNOWN_SKILL_SOURCES.get(name, "")
-    my_url = "" if is_downloaded else f"{MY_GITHUB_REPO}/tree/main/{name}"
+    my_url = "" if is_downloaded else (f"{MY_GITHUB_REPO}/tree/main/{name}" if MY_GITHUB_REPO else "")
 
     return {
         "name": name,
@@ -258,6 +267,8 @@ def scan_single_skill(skill_dir: Path) -> dict | None:
         "github_source_url": source_url,
         "github_my_url": my_url,
         "health": health_check(skill_dir),
+        "scope": scope,
+        "project": project,
         "sync_status": "pending",
         "scanned_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
@@ -275,6 +286,91 @@ def scan_all_skills(skills_dir: Path) -> dict:
         entry = scan_single_skill(item)
         if entry:
             skills[entry["name"]] = entry
+
+    return skills
+
+
+# ── 项目级技能扫描 ────────────────────────────────────────────────
+
+# 扫描时跳过这些目录
+PROJECT_EXCLUDE_DIRS = {"node_modules", ".git", "__pycache__", "claude-skills-repo", ".venv", "venv"}
+
+
+def get_project_name(skill_md_path: Path, scan_root: Path) -> str:
+    """从 SKILL.md 路径推断项目文件夹名（scan_root 下的第一级子目录）"""
+    try:
+        rel = skill_md_path.relative_to(scan_root)
+        return rel.parts[0] if rel.parts else ""
+    except ValueError:
+        return skill_md_path.parent.name
+
+
+def scan_project_skills(project_dirs: list[str], global_skills_dir: str = "") -> dict:
+    """递归扫描项目目录中的 skill，返回 {registry_key: entry}"""
+    skills = {}
+    seen_names = {}  # name -> [registry_keys] 用于检测重复
+    seen_paths = set()  # 避免同一目录重复扫描
+
+    for dir_str in project_dirs:
+        scan_root = Path(dir_str)
+        if not scan_root.exists():
+            continue
+
+        # 用 os.walk 递归，可以在遍历时跳过排除目录（避免 node_modules 深层路径崩溃）
+        for dirpath, dirnames, filenames in os.walk(scan_root):
+            # 就地修改 dirnames 跳过排除目录
+            dirnames[:] = [d for d in dirnames if d not in PROJECT_EXCLUDE_DIRS]
+
+            # 检查当前目录是否有 SKILL.md
+            md_name = None
+            for candidate in ["SKILL.md", "skill.md", "Skill.md"]:
+                if candidate in filenames:
+                    md_name = candidate
+                    break
+            if md_name is None:
+                continue
+
+            skill_dir = Path(dirpath)
+
+            # 跳过全局 skills 目录（已在 scan_all_skills 中扫描）
+            if global_skills_dir and str(skill_dir).startswith(global_skills_dir):
+                continue
+
+            # 跳过已扫描路径
+            dir_key = str(skill_dir).lower()
+            if dir_key in seen_paths:
+                continue
+            seen_paths.add(dir_key)
+
+            project_name = get_project_name(skill_dir / md_name, scan_root)
+
+            entry = scan_single_skill(skill_dir, scope="project", project=project_name)
+            if entry is None:
+                continue
+
+            name = entry["name"]
+
+            # 构建 registry key：同名 skill 用 name@project 区分
+            if name in seen_names:
+                # 已有同名的，之前的也需要加后缀（如果还没加）
+                for old_key in list(seen_names[name]):
+                    if old_key == name and old_key in skills:
+                        old_entry = skills.pop(old_key)
+                        new_key = f"{name}@{old_entry['project']}"
+                        skills[new_key] = old_entry
+                        seen_names[name].remove(old_key)
+                        seen_names[name].append(new_key)
+                reg_key = f"{name}@{project_name}"
+            else:
+                reg_key = name
+                seen_names[name] = []
+
+            # 避免重复 key
+            if reg_key in skills:
+                continue
+
+            seen_names[name].append(reg_key)
+            skills[reg_key] = entry
 
     return skills
 
@@ -443,14 +539,29 @@ def print_summary(registry: dict):
     print(f"{'='*60}")
 
     if skills:
-        print(f"\n── 技能列表 ──")
-        for name, s in skills.items():
-            health = s.get("health", {}).get("status", "?")
-            icon = {"healthy": "OK", "warning": "!!", "error": "XX"}.get(health, "??")
-            print(f"  [{icon}] {name:30s} | {s['category']:10s} | {s['size']:>8s} | {s['last_modified']}")
-            if health != "healthy":
-                for issue in s.get("health", {}).get("issues", []):
-                    print(f"        -> [{issue['level']}] {issue['msg']}")
+        global_skills = {k: v for k, v in skills.items() if v.get("scope", "global") == "global"}
+        project_skills = {k: v for k, v in skills.items() if v.get("scope") == "project"}
+
+        if global_skills:
+            print(f"\n── 全局技能 ({len(global_skills)}) ──")
+            for name, s in global_skills.items():
+                health = s.get("health", {}).get("status", "?")
+                icon = {"healthy": "OK", "warning": "!!", "error": "XX"}.get(health, "??")
+                print(f"  [{icon}] {name:30s} | {s['category']:10s} | {s['size']:>8s} | {s['last_modified']}")
+                if health != "healthy":
+                    for issue in s.get("health", {}).get("issues", []):
+                        print(f"        -> [{issue['level']}] {issue['msg']}")
+
+        if project_skills:
+            print(f"\n── 项目级技能 ({len(project_skills)}) ──")
+            for name, s in project_skills.items():
+                health = s.get("health", {}).get("status", "?")
+                icon = {"healthy": "OK", "warning": "!!", "error": "XX"}.get(health, "??")
+                proj = s.get("project", "")
+                print(f"  [{icon}] {name:30s} | {s['category']:10s} | {s['size']:>8s} | @{proj}")
+                if health != "healthy":
+                    for issue in s.get("health", {}).get("issues", []):
+                        print(f"        -> [{issue['level']}] {issue['msg']}")
 
     if mcps:
         print(f"\n── MCP 服务器 ──")
@@ -480,7 +591,7 @@ def main():
     args = parser.parse_args()
 
     # 加载 .env 中的配置
-    load_my_github_repo(Path(args.env))
+    load_env_config(Path(args.env))
 
     output_path = Path(args.output)
     registry = load_registry(output_path)
@@ -505,8 +616,14 @@ def main():
             registry["skills"].update(new_skills)
             print(f"已更新技能: {entry['name']}")
     else:
-        # 全量扫描
+        # 全量扫描：全局 + 项目级
         new_skills = scan_all_skills(skills_dir)
+
+        # 项目级扫描
+        if PROJECT_SCAN_DIRS:
+            project_skills = scan_project_skills(PROJECT_SCAN_DIRS, str(skills_dir))
+            new_skills.update(project_skills)
+
         registry["skills"] = merge_skills(registry, new_skills)
         registry["last_full_scan"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 

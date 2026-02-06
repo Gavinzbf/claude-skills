@@ -1,0 +1,123 @@
+# ========================================
+# 剪辑手法描述文件模板
+# 生成工具: editing-style-analyzer
+# ========================================
+
+meta:
+  version: 1
+  created_at: ""
+  updated_at: ""
+  samples_analyzed: 0
+  style_name: "未命名风格"
+
+# 片段选择规则
+selection:
+  keep_criteria:
+    - description: "画面清晰稳定"
+      priority: high
+    - description: "有明显的表情或动作变化"
+      priority: high
+    - description: "内容与主题相关"
+      priority: medium
+  remove_criteria:
+    - description: "画面过度模糊或抖动"
+    - description: "无明显内容或空镜头过长"
+    - description: "声音质量极差"
+  content_priority:
+    - "人物特写/表情"
+    - "动作场景"
+    - "产品/主体展示"
+    - "环境空镜"
+
+# 结构编排
+structure:
+  intro:
+    duration: "2-4秒"
+    content_type: "吸引注意力的镜头"
+    notes: "快速建立主题，前3秒决定观众是否继续观看"
+  body:
+    arrangement: "按时间顺序"  # 按时间顺序/按内容分类/按情绪递进
+    avg_segment_count: 5
+    notes: "主体内容展示"
+  climax:
+    position: "60-80%"  # 视频位置百分比
+    treatment: "节奏加快/镜头切换更密集"
+    notes: "高潮部分，情绪最高点"
+  outro:
+    duration: "2-3秒"
+    content_type: "总结性镜头或品牌露出"
+    notes: "呼吁行动或自然收尾"
+
+# 节奏控制
+rhythm:
+  overall_tempo: "medium"  # slow/medium/fast
+  clip_duration:
+    min: 1.5  # 最短片段时长（秒）
+    max: 6.0  # 最长片段时长（秒）
+    avg: 3.0  # 平均片段时长（秒）
+  pacing_pattern: "渐进加速型"  # 渐进加速型/平稳型/波浪型/快节奏型
+  beat_sync: false  # 是否需要与音乐节拍同步
+
+# 转场偏好
+transitions:
+  default: "hard_cut"  # 默认转场类型
+  by_context:
+    scene_change: "dissolve"      # 场景切换
+    time_skip: "fade"             # 时间跳跃
+    same_scene: "hard_cut"        # 同场景连续
+    emotional_shift: "dissolve"   # 情绪转变
+  duration_ms: 500  # 转场时长（毫秒）
+  notes: ""
+
+# 视觉处理
+visual:
+  color_grading: "自然"  # 自然/暖调/冷调/高对比/复古/电影感
+  saturation: "normal"   # low/normal/high
+  contrast: "normal"     # low/normal/high
+  preferred_compositions:
+    - "人物居中"
+    - "三分法构图"
+  effects:
+    - name: "无"
+      usage: ""
+  crop_style: "9:16"  # 输出画面比例
+
+# 音频处理
+audio:
+  original_audio: "保留"  # 保留/静音/降低音量
+  original_volume: 100    # 原声音量百分比
+  music_style: "无背景音乐"  # 节奏感强/舒缓/无背景音乐/根据内容选择
+  music_volume: 70        # 背景音乐音量百分比
+  sound_effects: []       # 使用的音效类型
+  ducking: false          # 是否在人声时自动降低背景音乐
+
+# 特殊技巧
+techniques:
+  speed_ramp: false              # 变速
+  speed_ramp_style: ""           # 渐变加速/突然加速/慢动作强调
+  text_overlays: false           # 文字叠加
+  text_style: ""                 # 字幕样式描述
+  picture_in_picture: false      # 画中画
+  zoom_pan: false                # Ken Burns 效果
+  split_screen: false            # 分屏
+  custom: []                     # 其他自定义技巧
+
+# 平台适配
+platform:
+  primary: "抖音/TikTok"  # 主要目标平台
+  aspect_ratio: "9:16"    # 画面比例
+  max_duration: 60        # 最大时长（秒）
+  safe_zone:              # 安全区域（避免被平台UI遮挡）
+    top: 150              # 顶部安全边距（像素）
+    bottom: 100           # 底部安全边距（像素）
+
+# 分析来源记录（用于迭代追踪）
+analysis_history: []
+  # - date: "2025-01-16"
+  #   source_folder: "D:\\Videos\\raw"
+  #   result_video: "D:\\Videos\\output.mp4"
+  #   source_clips: 10
+  #   result_duration: "45秒"
+  #   key_observations:
+  #     - "偏好使用硬切"
+  #     - "片段平均时长3秒"

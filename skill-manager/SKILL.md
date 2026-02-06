@@ -16,6 +16,7 @@ description: |
 
 - 技能目录: `C:\Users\fubai\.claude\skills\`
 - MCP 配置: `C:\Users\fubai\.claude.json`
+- 项目扫描目录: `D:\CursorCode`（.env 中 PROJECT_SCAN_DIRS 配置）
 - 脚本目录: `C:\Users\fubai\.claude\skills\skill-manager\scripts\`
 - 数据目录: `C:\Users\fubai\.claude\skills\skill-manager\data\`
 - 飞书凭据: `C:\Users\fubai\.claude\skills\skill-manager\.env`
@@ -99,6 +100,8 @@ python scripts/scan.py --health-check
 | 同步状态 | 已同步 / 待同步 |
 | 来源地址 | 下载来源的 GitHub 链接（如 anthropics/skills）|
 | 我的仓库 | 自创技能推送到的 GitHub 仓库链接 |
+| 作用域 | 全局 / 项目级 |
+| 所属项目 | 项目文件夹名（项目级 skill 才有值）|
 
 ### MCP 服务器表
 | 列 | 说明 |

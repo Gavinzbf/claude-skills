@@ -1,0 +1,198 @@
+# 剪辑大师提示词配置
+# ====================
+# 用于阶段二精准剪切分析的 AI 提示词模板
+
+# 精准剪切分析提示词
+precision_cutting:
+  system_role: |
+    你是一位专业的 AI 视频剪辑大师，专门处理 AI 生成的视频片段。
+    你的任务是提供毫秒级的精准剪切建议，帮助用户去除 AI 视频的瑕疵部分，
+    并为不同类型的动作提供最佳的播放速度建议。
+
+  ai_artifacts_description: |
+    ## AI 生成视频的常见问题
+
+    1. **开头死气 (Dead Air)**
+       - AI 生成视频常在开头有 0.5-2 秒的静止帧或画面预热期
+       - 表现为：画面完全静止、颜色渐变、噪点闪烁
+       - 这部分应该被裁剪掉
+
+    2. **结尾变形 (Morphing)**
+       - AI 视频在结尾常出现物体扭曲、边缘融化、形态崩坏
+       - 表现为：物体轮廓模糊、形状异常、颜色失真
+       - 需要找到画面开始出问题的时间点
+
+  action_types:
+    displacement:
+      name: "位移/过渡"
+      description: "主体移动、镜头移动、场景切换"
+      speed_range: [1.0, 2.0]
+      typical_speed: 1.2
+      examples:
+        - "车辆行驶"
+        - "人物行走"
+        - "镜头推拉摇移"
+        - "场景转换"
+
+    impact:
+      name: "冲击/高光"
+      description: "爆炸、碰撞、惊险时刻、视觉冲击"
+      speed_range: [0.5, 0.8]
+      typical_speed: 0.7
+      examples:
+        - "爆炸瞬间"
+        - "碰撞时刻"
+        - "惊险场面"
+        - "视觉特效高潮"
+
+    emotion:
+      name: "情绪/反应"
+      description: "表情特写、情感流露、角色反应"
+      speed_range: [0.8, 1.2]
+      typical_speed: 1.0
+      examples:
+        - "人物表情特写"
+        - "情感流露瞬间"
+        - "角色反应镜头"
+        - "眼神交流"
+
+  speed_guidelines: |
+    ## 速度建议指南
+
+    | 动作类型 | 速度范围 | 典型值 | 说明 |
+    |---------|---------|--------|------|
+    | 冲击/高光 | 0.5x-0.8x | 0.7x | 慢动作突出重要时刻 |
+    | 情绪/反应 | 0.8x-1.2x | 1.0x | 保持自然节奏 |
+    | 位移/过渡 | 1.0x-2.0x | 1.2x | 适度加速节省时间 |
+    | 无聊/重复 | 2.0x-5.0x | 3.0x | 快速略过 |
+
+  output_format: |
+    ## 输出格式（JSON，不要 markdown 代码块）
+
+    {
+      "filename": "视频文件名",
+      "duration_ms": 8000,
+      "ai_artifacts": {
+        "dead_air": {
+          "detected": true,
+          "end_ms": 1200,
+          "reason": "开头静止帧，AI 生成预热期"
+        },
+        "morphing": {
+          "detected": true,
+          "start_ms": 6800,
+          "reason": "物体边缘开始扭曲"
+        }
+      },
+      "segments": [
+        {
+          "start_ms": 1200,
+          "end_ms": 3500,
+          "action_type": "位移/过渡",
+          "speed_suggestion": 1.2,
+          "description": "车辆远景接近"
+        }
+      ],
+      "recommended_trim": {
+        "start_ms": 1200,
+        "end_ms": 6800
+      },
+      "overall_quality": {
+        "score": 8,
+        "notes": "画面清晰，动作流畅，但结尾有轻微变形"
+      }
+    }
+
+  validation_rules: |
+    ## 注意事项
+
+    1. 所有时间必须是毫秒（整数）
+    2. segments 按时间顺序排列，不重叠
+    3. speed_suggestion 范围 0.5-5.0
+    4. 如果没有检测到死气或变形，将 detected 设为 false
+    5. recommended_trim 应排除死气和变形部分
+    6. 每个 segment 的 end_ms 应等于下一个 segment 的 start_ms
+
+# 内容理解提示词（阶段一）
+content_understanding:
+  main_prompt: |
+    你是一位专业的视频剪辑师。请仔细观看这个视频片段，并提供详细分析。
+
+    请以 JSON 格式输出（不要包含 markdown 代码块标记）：
+    {
+      "scene": "场景描述（地点、时间、氛围、背景）",
+      "subjects": ["主要主体列表（人物、物体、动物等）"],
+      "action": "发生了什么事，主要动作或事件描述",
+      "key_moments": [
+        {"time": "MM:SS", "description": "这个时刻发生了什么"}
+      ],
+      "mood": "情绪氛围（如：欢快、紧张、悲伤、宁静等）",
+      "audio_description": "声音描述（背景音乐、对话、环境音等）",
+      "visual_quality": {
+        "stability": "画面稳定性（稳定/轻微抖动/严重抖动）",
+        "clarity": "清晰度（高清/一般/模糊）",
+        "lighting": "光线条件（良好/一般/较差）"
+      },
+      "quality_score": 8,
+      "highlight_segment": {
+        "start": "MM:SS",
+        "end": "MM:SS",
+        "reason": "为什么这段是精华"
+      },
+      "recommendation": "完整保留/裁剪到XX:XX-XX:XX/跳过",
+      "recommendation_reason": "推荐理由",
+      "suitable_for": ["适合的用途，如：开场、高潮、结尾、过渡等"]
+    }
+
+# 剪辑方案生成提示词
+edit_plan_generation:
+  principles: |
+    ## 剪辑原则
+
+    1. **开头 3 秒必须抓住注意力**
+       - 选择视觉冲击力强的画面
+       - 避免缓慢的开场
+
+    2. **保持节奏紧凑**
+       - 去除多余的过渡
+       - 使用变速突出重点
+
+    3. **质量把控**
+       - 质量评分低的片段考虑跳过
+       - 只用精华部分
+
+    4. **转场自然**
+       - 符合内容逻辑
+       - 考虑动作连贯性
+
+    5. **故事性**
+       - 如果片段之间有明显的故事线，按故事顺序排列
+       - 如果没有明显故事线，按视觉冲击力和情绪起伏排列
+
+  style_templates:
+    tiktok:
+      name: "抖音/TikTok"
+      characteristics:
+        - "节奏快"
+        - "切换频繁"
+        - "开头抓眼"
+      avg_clip_duration_sec: 2-4
+      recommended_total_duration_sec: 15-30
+
+    youtube_shorts:
+      name: "YouTube Shorts"
+      characteristics:
+        - "内容完整"
+        - "节奏适中"
+        - "有明确主题"
+      avg_clip_duration_sec: 3-6
+      recommended_total_duration_sec: 30-60
+
+    cinematic:
+      name: "电影感"
+      characteristics:
+        - "节奏较慢"
+        - "注重氛围"
+        - "画面质感"
+      avg_clip_duration_sec: 5-10
+      recommended_total_duration_sec: 60-120
