@@ -43,6 +43,9 @@ CATEGORY_KEYWORDS = {
 KNOWN_MCP_GITHUB = {
     "@playwright/mcp": "https://github.com/microsoft/playwright-mcp",
     "n8n-mcp": "https://github.com/czlonkowski/n8n-mcp",
+    "firecrawl-mcp": "https://github.com/firecrawl/firecrawl-mcp-server",
+    "@modelcontextprotocol/server-brave-search": "https://github.com/brave/brave-search-mcp-server",
+    "@upstash/context7-mcp": "https://github.com/upstash/context7",
 }
 
 # ── 已知来源映射（下载的 skill → 原始 GitHub 地址）─────────────────
@@ -465,8 +468,8 @@ def main():
     parser = argparse.ArgumentParser(description="Skill & MCP Scanner")
     parser.add_argument("--skills-dir", default=r"C:\Users\fubai\.claude\skills",
                         help="技能目录路径")
-    parser.add_argument("--mcp-settings", default=r"C:\Users\fubai\.claude\mcp_settings.json",
-                        help="MCP 配置文件路径")
+    parser.add_argument("--mcp-settings", default=r"C:\Users\fubai\.claude.json",
+                        help="MCP 配置文件路径（~/.claude.json）")
     parser.add_argument("--output", default=r"C:\Users\fubai\.claude\skills\skill-manager\data\registry.json",
                         help="注册表输出路径")
     parser.add_argument("--env", default=r"C:\Users\fubai\.claude\skills\skill-manager\.env",

@@ -15,7 +15,7 @@ description: |
 ## 路径配置
 
 - 技能目录: `C:\Users\fubai\.claude\skills\`
-- MCP 配置: `C:\Users\fubai\.claude\mcp_settings.json`
+- MCP 配置: `C:\Users\fubai\.claude.json`
 - 脚本目录: `C:\Users\fubai\.claude\skills\skill-manager\scripts\`
 - 数据目录: `C:\Users\fubai\.claude\skills\skill-manager\data\`
 - 飞书凭据: `C:\Users\fubai\.claude\skills\skill-manager\.env`
