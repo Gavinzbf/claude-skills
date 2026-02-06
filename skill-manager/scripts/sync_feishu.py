@@ -12,6 +12,11 @@ import sys
 import time
 from pathlib import Path
 
+# Windows CMD 中文编码修复
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
 import requests
 
 BASE_URL = "https://open.feishu.cn/open-apis"
@@ -168,6 +173,33 @@ def find_table_by_name(tables: list, name: str) -> str | None:
     return None
 
 
+def list_fields(token: str, app_token: str, table_id: str) -> list:
+    """获取表的所有字段"""
+    data = api_request("GET", f"/bitable/v1/apps/{app_token}/tables/{table_id}/fields", token)
+    return data.get("items", [])
+
+
+def add_field(token: str, app_token: str, table_id: str, field_name: str, field_type: int):
+    """添加单个字段到表"""
+    api_request("POST", f"/bitable/v1/apps/{app_token}/tables/{table_id}/fields", token,
+                json={"field_name": field_name, "type": field_type})
+
+
+def ensure_fields(token: str, app_token: str, table_id: str, expected_fields: list):
+    """确保表中存在所有期望字段，缺失的自动添加"""
+    existing = list_fields(token, app_token, table_id)
+    existing_names = {f.get("field_name") for f in existing}
+
+    for field_def in expected_fields:
+        fname = field_def["field_name"]
+        if fname not in existing_names:
+            print(f"  自动添加缺失字段: {fname}")
+            try:
+                add_field(token, app_token, table_id, fname, field_def["type"])
+            except Exception as e:
+                print(f"  添加字段失败 [{fname}]: {e}", file=sys.stderr)
+
+
 def ensure_tables(token: str, config: dict, config_path: Path) -> dict:
     """确保多维表格和数据表存在，支持复用已有多维表格"""
     app_token = config.get("app_token")
@@ -219,6 +251,10 @@ def ensure_tables(token: str, config: dict, config_path: Path) -> dict:
 
     if changed:
         save_config(config, config_path)
+
+    # 检查字段完整性，自动添加缺失字段
+    ensure_fields(token, app_token, config["skill_table_id"], SKILL_FIELDS)
+    ensure_fields(token, app_token, config["mcp_table_id"], MCP_FIELDS)
 
     return config
 

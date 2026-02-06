@@ -13,6 +13,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Windows CMD 中文编码修复
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
 import yaml
 
 # ── 分类关键词映射 ──────────────────────────────────────────────
@@ -45,8 +50,23 @@ KNOWN_SKILL_SOURCES = {
     "skill-creator": "https://github.com/anthropics/skills/tree/main/skills/skill-creator",
 }
 
-# ── 用户 GitHub 仓库配置 ────────────────────────────────────────
-MY_GITHUB_REPO = "https://github.com/Gavinzbf/claude-skills"
+# ── 用户 GitHub 仓库配置（从 .env 加载，可覆盖）────────────────
+MY_GITHUB_REPO = ""
+
+
+def load_my_github_repo(env_path: Path = None) -> str:
+    """从 .env 加载 MY_GITHUB_REPO，或回退默认值"""
+    global MY_GITHUB_REPO
+    if env_path and env_path.exists():
+        try:
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("MY_GITHUB_REPO="):
+                    MY_GITHUB_REPO = line.split("=", 1)[1].strip().strip('"').strip("'").rstrip("/")
+                    return MY_GITHUB_REPO
+        except OSError:
+            pass
+    return MY_GITHUB_REPO
 
 
 # ── 工具函数 ────────────────────────────────────────────────────
@@ -80,11 +100,17 @@ def parse_frontmatter(skill_md_path: Path):
     return None
 
 
+EXCLUDE_PATTERNS = {"data", "__pycache__", ".env", ".git"}
+
+
 def calc_size(path: Path) -> str:
-    """计算目录总大小，返回人类可读格式"""
+    """计算目录总大小，排除运行时文件，返回人类可读格式"""
     total = 0
     try:
         for f in path.rglob("*"):
+            # 跳过排除的目录/文件
+            if any(part in EXCLUDE_PATTERNS for part in f.parts):
+                continue
             if f.is_file():
                 total += f.stat().st_size
     except OSError:
@@ -243,9 +269,6 @@ def scan_all_skills(skills_dir: Path) -> dict:
     for item in sorted(skills_dir.iterdir()):
         if not item.is_dir():
             continue
-        # 跳过自身
-        if item.name == "skill-manager":
-            continue
         entry = scan_single_skill(item)
         if entry:
             skills[entry["name"]] = entry
@@ -344,39 +367,42 @@ def save_registry(registry: dict, path: Path):
 
 
 def merge_skills(old_reg: dict, new_skills: dict) -> dict:
-    """合并新扫描结果到现有注册表，保留用户手工填写的字段"""
+    """合并新扫描结果到现有注册表，新扫描值优先，仅在新值为空时保留旧值"""
     existing = old_reg.get("skills", {})
     for name, entry in new_skills.items():
         if name in existing:
-            # 保留用户手工设置的值
-            entry["github_source_url"] = existing[name].get("github_source_url", "") or entry.get("github_source_url", "")
-            entry["github_my_url"] = existing[name].get("github_my_url", "") or entry.get("github_my_url", "")
-            entry["feishu_record_id"] = existing[name].get("feishu_record_id")
-            # 如果之前有人工翻译的中文描述（没有 [需要翻译] 前缀），保留
-            old_zh = existing[name].get("description_zh", "")
-            if old_zh and not old_zh.startswith("[需要翻译]"):
+            old = existing[name]
+            # GitHub URL: 新值优先，空时回退旧值
+            entry["github_source_url"] = entry.get("github_source_url", "") or old.get("github_source_url", "")
+            entry["github_my_url"] = entry.get("github_my_url", "") or old.get("github_my_url", "")
+            entry["feishu_record_id"] = old.get("feishu_record_id")
+            # 中文描述: 保留已翻译的（无 [需要翻译] 前缀），新扫描有中文则用新的
+            old_zh = old.get("description_zh", "")
+            if entry["description_zh"].startswith("[需要翻译]") and old_zh and not old_zh.startswith("[需要翻译]"):
                 entry["description_zh"] = old_zh
             # 检测数据是否有变更
             for key in ("description", "size", "last_modified", "category"):
-                if entry.get(key) != existing[name].get(key):
+                if entry.get(key) != old.get(key):
                     entry["sync_status"] = "modified"
                     break
             else:
-                entry["sync_status"] = existing[name].get("sync_status", "pending")
+                entry["sync_status"] = old.get("sync_status", "pending")
         else:
             entry["feishu_record_id"] = None
     return new_skills
 
 
 def merge_mcp(old_reg: dict, new_servers: dict) -> dict:
-    """合并 MCP 扫描结果"""
+    """合并 MCP 扫描结果，新扫描值优先"""
     existing = old_reg.get("mcp_servers", {})
     for name, entry in new_servers.items():
         if name in existing:
-            entry["github_url"] = existing[name].get("github_url", "") or entry["github_url"]
-            entry["description_zh"] = existing[name].get("description_zh", "") or entry["description_zh"]
-            entry["feishu_record_id"] = existing[name].get("feishu_record_id")
-            entry["sync_status"] = existing[name].get("sync_status", "pending")
+            old = existing[name]
+            # 新值优先，空时回退旧值
+            entry["github_url"] = entry.get("github_url", "") or old.get("github_url", "")
+            entry["description_zh"] = entry.get("description_zh", "") or old.get("description_zh", "")
+            entry["feishu_record_id"] = old.get("feishu_record_id")
+            entry["sync_status"] = old.get("sync_status", "pending")
         else:
             entry["feishu_record_id"] = None
     return new_servers
@@ -443,10 +469,15 @@ def main():
                         help="MCP 配置文件路径")
     parser.add_argument("--output", default=r"C:\Users\fubai\.claude\skills\skill-manager\data\registry.json",
                         help="注册表输出路径")
+    parser.add_argument("--env", default=r"C:\Users\fubai\.claude\skills\skill-manager\.env",
+                        help=".env 配置文件路径")
     parser.add_argument("--skill-name", help="仅扫描指定技能（增量模式）")
     parser.add_argument("--search", help="按关键词搜索")
     parser.add_argument("--health-check", action="store_true", help="仅显示健康检查结果")
     args = parser.parse_args()
+
+    # 加载 .env 中的配置
+    load_my_github_repo(Path(args.env))
 
     output_path = Path(args.output)
     registry = load_registry(output_path)

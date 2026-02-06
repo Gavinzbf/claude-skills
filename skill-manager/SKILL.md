@@ -26,8 +26,10 @@ description: |
 ```
 FEISHU_APP_ID=应用ID
 FEISHU_APP_SECRET=应用密钥
+MY_GITHUB_REPO=https://github.com/用户名/仓库名
 ```
 如不存在，提示用户到 https://open.feishu.cn/app 创建应用并获取凭据。
+`MY_GITHUB_REPO` 用于自创技能的"我的仓库"链接自动生成。
 
 ## 操作模式
 
@@ -95,7 +97,8 @@ python scripts/scan.py --health-check
 | 文件大小 | 如 4.2 KB |
 | 健康状态 | healthy / warning / error |
 | 同步状态 | 已同步 / 待同步 |
-| GitHub地址 | 可点击链接 |
+| 来源地址 | 下载来源的 GitHub 链接（如 anthropics/skills）|
+| 我的仓库 | 自创技能推送到的 GitHub 仓库链接 |
 
 ### MCP 服务器表
 | 列 | 说明 |
@@ -111,8 +114,11 @@ python scripts/scan.py --health-check
 
 ## 注意事项
 
-- 扫描时会自动跳过 skill-manager 自身
+- skill-manager 自身也会被扫描和管理，size 计算时排除 data/、.env 等运行时文件
 - 英文技能描述在同步前由 Claude 翻译为中文，更新到 registry.json 的 description_zh 字段
-- GitHub 地址需要用户手动补充或由 Claude 帮助查找
-- MCP 的 GitHub 地址会根据 npm 包名自动猜测，可能需要修正
+- 来源地址（下载的 skill）通过 KNOWN_SKILL_SOURCES 映射自动填充
+- 我的仓库（自创 skill）通过 .env 中的 MY_GITHUB_REPO 自动拼接
+- MCP 的 GitHub 地址通过 KNOWN_MCP_GITHUB 映射 + npm 包名推断
+- 飞书表字段变更时会自动迁移（添加缺失字段），无需手动删表重建
+- merge 逻辑：重新扫描的值优先，仅在新值为空时保留旧值
 - 飞书 API 参考文档: 见 `references/feishu-api.md`
